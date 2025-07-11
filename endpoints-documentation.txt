@@ -1,0 +1,31 @@
+http://10.1.1.50/somfy_devices.json
+{ "JOG" : {"STEP": 500 , "TYPE" : "ms"}, "DEVICES" : [  { "NODE" : "13.25.5B"  , "LABEL" : "BEDROOM 2" } , { "NODE" : "13.2B.3A"  , "LABEL" : "MASTER SUITE" } , { "NODE" : "13.27.67"  , "LABEL" : "BEDROOM 2 DOOR" } , { "NODE" : "13.29.FB"  , "LABEL" : "LIVING ROOM" } , { "NODE" : "13.2A.01"  , "LABEL" : "KITCHEN" } , { "NODE" : "13.26.E3"  , "LABEL" : "BATHROOM" } ] }
+
+------------
+
+http://10.1.1.50/somfy_presets.json?13.2A.01
+{ "PRESETS" : { "NODE" : "13.2A01","ALIAS" : "KITCHEN ","PERCENT" : [""],"PULSE" : [""]
+
+------------
+
+http://10.1.1.50/somfy_device.json?13.2A.01
+{
+    "DEVICE": {
+        "NODE": "13.2A.01",
+        "TYPE": "Sonesse 50DC",
+        "LABEL": "KITCHEN",
+        "LOCK": "Unlocked (0)",
+        "POSITION": "11093 (92 %)",
+        "DIRECTION": "STANDARD",
+        "LIMITS UP": "0",
+        "LIMITS DOWN": "12100",
+        "ROLL SPEED UP": "25",
+        "ROLL SPEED DOWN": "25",
+        "ROLL SPEED SLOW": "15",
+        "SERIAL NUMBER": "  ",
+        "STACK VERSION": "5115635A4"
+    }
+}
+
+
+http://10.1.1.50/somfy.cgi?13.2A.01:POSITION=11100
