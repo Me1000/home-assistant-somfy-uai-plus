@@ -1,0 +1,13 @@
+{
+  "domain": "somfy_uai_plus",
+  "name": "Somfy UAI+",
+  "version": "1.0.0",
+  "documentation": "https://github.com/me1000/somfy-uai-plus",
+  "codeowners": ["@me1000"],
+  "config_flow": true,
+  "dependencies": [],
+  "requirements": [],
+  "iot_class": "local_polling",
+  "quality_scale": "silver",
+  "integration_type": "hub"
+}
