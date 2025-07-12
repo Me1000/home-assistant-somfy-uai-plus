@@ -86,6 +86,13 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
         
         if self._node_id in self.coordinator.data:
             device_data = self.coordinator.data[self._node_id]
+            
+            # For telnet clients, use percentage directly since raw position isn't meaningful
+            if device_data.get("is_telnet_client", False):
+                percentage = device_data.get("position", 0)
+                return max(0, min(100, int(percentage)))
+            
+            # For HTTP clients, calculate from raw position and limits
             raw_position = device_data.get("raw_position")
             limits_up = int(device_data.get("limits_up", 0))
             limits_down = int(device_data.get("limits_down", 10))

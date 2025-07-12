@@ -52,11 +52,17 @@ class SomfyUAICoordinator(DataUpdateCoordinator):
                         try:
                             # Extract percentage from parentheses
                             percentage = int(position_str.split("(")[1].split(" %")[0])
-                            # Also get raw position value for telnet client compatibility
+                            # Also get raw position value 
                             raw_position = int(position_str.split(" (")[0])
                         except (IndexError, ValueError):
                             percentage = 0
                             raw_position = 0
+                        
+                        # Check if this is telnet client data (raw_position = 0 with percentage > 0)
+                        # For telnet clients, use percentage directly since raw position isn't meaningful
+                        limits_up = device_info.get("LIMITS UP", "0")
+                        limits_down = device_info.get("LIMITS DOWN", "100")
+                        is_telnet_client = (raw_position == 0 and percentage > 0 and limits_down == "100")
                         
                         device_data[node_id] = {
                             "node_id": node_id,
@@ -64,10 +70,11 @@ class SomfyUAICoordinator(DataUpdateCoordinator):
                             "type": device_info.get("TYPE", "Unknown"),
                             "position": percentage,
                             "raw_position": raw_position,
+                            "is_telnet_client": is_telnet_client,
                             "lock": device_info.get("LOCK", "Unknown"),
                             "direction": device_info.get("DIRECTION", "STANDARD"),
-                            "limits_up": device_info.get("LIMITS UP", "0"),
-                            "limits_down": device_info.get("LIMITS DOWN", "12100"),
+                            "limits_up": limits_up,
+                            "limits_down": limits_down,
                             "serial_number": device_info.get("SERIAL NUMBER", "").strip(),
                         }
             

@@ -65,10 +65,34 @@ class SomfyUAIClient:
             _LOGGER.error("Invalid position %s for device %s", position, node_id)
             return False
         
-        # Convert percentage to device position (0-12100 range based on your example)
-        device_position = int(position * 121)
-        
         try:
+            # Get device info to determine actual limits
+            device_info = await self.get_device_info(node_id)
+            if not device_info:
+                _LOGGER.error("Could not get device info for %s to determine limits", node_id)
+                return False
+            
+            # Parse limits from device info
+            try:
+                limits_up = int(device_info.get("LIMITS UP", "0"))
+                limits_down = int(device_info.get("LIMITS DOWN", "100"))
+            except (ValueError, TypeError):
+                _LOGGER.error("Invalid limits for device %s: up=%s, down=%s", 
+                             node_id, device_info.get("LIMITS UP"), device_info.get("LIMITS DOWN"))
+                return False
+            
+            # Calculate device position based on actual device limits
+            if limits_down <= limits_up:
+                _LOGGER.error("Invalid limits for device %s: up=%s >= down=%s", 
+                             node_id, limits_up, limits_down)
+                return False
+            
+            position_range = limits_down - limits_up
+            device_position = int((position / 100) * position_range) + limits_up
+            
+            _LOGGER.debug("Device %s: HA position=%s%%, device_position=%s, limits=[%s,%s]", 
+                         node_id, position, device_position, limits_up, limits_down)
+            
             async with async_timeout.timeout(10):
                 async with self.session.get(f"{self.base_url}/somfy.cgi?{node_id}:POSITION={device_position}") as response:
                     success = response.status == 200
@@ -91,7 +115,7 @@ class SomfyUAIClient:
             # Parse limits from device info
             try:
                 limits_up = int(device_info.get("LIMITS UP", "0"))
-                limits_down = int(device_info.get("LIMITS DOWN", "12100"))
+                limits_down = int(device_info.get("LIMITS DOWN", "100"))
             except (ValueError, TypeError):
                 _LOGGER.error("Invalid limits for device %s: up=%s, down=%s", 
                              node_id, device_info.get("LIMITS UP"), device_info.get("LIMITS DOWN"))
@@ -377,9 +401,14 @@ class TelnetSomfyUAIClient:
                 _LOGGER.error("Invalid device info response for %s: %s", node_id, info)
                 return None
             
-            # Format position to match HTTP API format "position (percentage %)"
+            # Telnet API returns inverted position (100% = closed, 0% = open)
+            # Convert to Home Assistant convention (100% = open, 0% = closed)
             position_value = position if isinstance(position, (int, float)) else 0
-            position_str = f"{int(position_value * 121)} ({position_value} %)"
+            ha_position = 100 - position_value  # Invert the position
+            
+            # The telnet protocol doesn't provide device limits, so we'll use percentage format
+            # The coordinator will handle the position calculation properly
+            position_str = f"0 ({ha_position} %)"  # Raw value not available from telnet API
             
             return {
                 "LABEL": info.get("name", f"Device {node_id}"),
@@ -387,8 +416,8 @@ class TelnetSomfyUAIClient:
                 "POSITION": position_str,
                 "LOCK": "UNLOCKED",  # Telnet protocol doesn't provide this
                 "DIRECTION": "STANDARD",  # Default, could be made configurable
-                "LIMITS UP": "0",
-                "LIMITS DOWN": "12100",  # Standard limits to match HTTP API
+                "LIMITS UP": "0",      # Telnet protocol doesn't provide actual limits
+                "LIMITS DOWN": "100",  # Use percentage range since telnet works in percentages
                 "SERIAL NUMBER": node_id,  # Use node_id as serial
             }
             
@@ -406,12 +435,19 @@ class TelnetSomfyUAIClient:
             # Convert HTTP API node ID format to telnet format for requests
             telnet_node_id = self._denormalize_node_id(node_id)
             
-            # Send move command with position as percentage
+            # Telnet API expects inverted position (100% = closed, 0% = open)
+            # Convert from Home Assistant convention (100% = open, 0% = closed)
+            telnet_position = 100 - position
+            
+            _LOGGER.debug("Setting position for %s: HA %s%% -> telnet %s%%", 
+                         node_id, position, telnet_position)
+            
+            # Send move command with inverted position
             result = await self._send_request(
                 "sdn.move.to",
                 [{
                     "targetID": telnet_node_id,
-                    "position": position,
+                    "position": telnet_position,
                     "type": "percent",
                     "seq": self._request_id  # Use current request ID as sequence
                 }]
@@ -438,7 +474,7 @@ class TelnetSomfyUAIClient:
             # Parse limits from device info
             try:
                 limits_up = int(device_info.get("LIMITS UP", "0"))
-                limits_down = int(device_info.get("LIMITS DOWN", "12100"))
+                limits_down = int(device_info.get("LIMITS DOWN", "100"))
             except (ValueError, TypeError):
                 _LOGGER.error("Invalid limits for device %s: up=%s, down=%s", 
                              node_id, device_info.get("LIMITS UP"), device_info.get("LIMITS DOWN"))
