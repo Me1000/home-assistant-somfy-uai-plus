@@ -10,19 +10,29 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import ipaddress
 
-from .api import SomfyUAIClient
-from .const import DOMAIN, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+from .api import SomfyUAIClient, TelnetSomfyUAIClient
+from .const import (
+    DOMAIN, 
+    CONF_PROTOCOL, 
+    CONF_SCAN_INTERVAL, 
+    DEFAULT_SCAN_INTERVAL,
+    PROTOCOL_HTTP,
+    PROTOCOL_TELNET,
+    DEFAULT_PROTOCOL
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST): str,
+    vol.Optional(CONF_PROTOCOL, default=DEFAULT_PROTOCOL): vol.In([PROTOCOL_HTTP, PROTOCOL_TELNET]),
 })
 
 
 async def validate_input(hass: HomeAssistant, data: dict) -> Dict[str, Any]:
     """Validate the user input allows us to connect."""
     host = data[CONF_HOST]
+    protocol = data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)
     
     # Validate IP address format
     try:
@@ -30,21 +40,30 @@ async def validate_input(hass: HomeAssistant, data: dict) -> Dict[str, Any]:
     except ValueError:
         raise InvalidHost("Invalid IP address format")
     
-    # Test connection
-    session = async_get_clientsession(hass)
-    client = SomfyUAIClient(host, session)
+    # Test connection based on protocol
+    if protocol == PROTOCOL_TELNET:
+        client = TelnetSomfyUAIClient(host)
+    else:
+        session = async_get_clientsession(hass)
+        client = SomfyUAIClient(host, session)
     
-    if not await client.test_connection():
-        raise CannotConnect("Cannot connect to Somfy UAI+ controller")
-    
-    # Get device count for info
-    devices = await client.get_devices()
-    
-    return {
-        "title": f"Somfy UAI+ ({host})",
-        "host": host,
-        "device_count": len(devices)
-    }
+    try:
+        if not await client.test_connection():
+            raise CannotConnect("Cannot connect to Somfy UAI+ controller")
+        
+        # Get device count for info
+        devices = await client.get_devices()
+        
+        return {
+            "title": f"Somfy UAI+ ({host}) - {protocol.upper()}",
+            "host": host,
+            "protocol": protocol,
+            "device_count": len(devices)
+        }
+    finally:
+        # Clean up telnet connection
+        if hasattr(client, 'close'):
+            await client.close()
 
 
 class SomfyUAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -117,6 +136,8 @@ class SomfyUAIOptionsFlow(config_entries.OptionsFlow):
                 # Update the config entry data and options
                 new_data = dict(self.config_entry.data)
                 new_data[CONF_HOST] = user_input[CONF_HOST]
+                if CONF_PROTOCOL in user_input:
+                    new_data[CONF_PROTOCOL] = user_input[CONF_PROTOCOL]
                 
                 new_options = dict(self.config_entry.options)
                 if CONF_SCAN_INTERVAL in user_input:
@@ -144,10 +165,12 @@ class SomfyUAIOptionsFlow(config_entries.OptionsFlow):
 
         # Show form with current values as defaults
         current_host = self.config_entry.data.get(CONF_HOST, "")
+        current_protocol = self.config_entry.data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)
         current_scan_interval = self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         
         schema = vol.Schema({
             vol.Required(CONF_HOST, default=current_host): str,
+            vol.Optional(CONF_PROTOCOL, default=current_protocol): vol.In([PROTOCOL_HTTP, PROTOCOL_TELNET]),
             vol.Optional(CONF_SCAN_INTERVAL, default=current_scan_interval): vol.All(
                 vol.Coerce(int), vol.Range(min=5, max=300)
             ),

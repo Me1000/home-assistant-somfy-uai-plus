@@ -6,8 +6,15 @@ from typing import Any, Dict, List
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import SomfyUAIClient
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, CONF_SCAN_INTERVAL
+from .api import SomfyUAIClient, TelnetSomfyUAIClient
+from .const import (
+    DEFAULT_SCAN_INTERVAL, 
+    DOMAIN, 
+    CONF_SCAN_INTERVAL, 
+    CONF_PROTOCOL, 
+    PROTOCOL_TELNET, 
+    DEFAULT_PROTOCOL
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,14 +52,18 @@ class SomfyUAICoordinator(DataUpdateCoordinator):
                         try:
                             # Extract percentage from parentheses
                             percentage = int(position_str.split("(")[1].split(" %")[0])
+                            # Also get raw position value for telnet client compatibility
+                            raw_position = int(position_str.split(" (")[0])
                         except (IndexError, ValueError):
                             percentage = 0
+                            raw_position = 0
                         
                         device_data[node_id] = {
                             "node_id": node_id,
                             "label": device_info.get("LABEL", device.get("LABEL", "Unknown")),
                             "type": device_info.get("TYPE", "Unknown"),
                             "position": percentage,
+                            "raw_position": raw_position,
                             "lock": device_info.get("LOCK", "Unknown"),
                             "direction": device_info.get("DIRECTION", "STANDARD"),
                             "limits_up": device_info.get("LIMITS UP", "0"),

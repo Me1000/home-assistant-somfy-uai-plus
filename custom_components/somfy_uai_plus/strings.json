@@ -5,7 +5,8 @@
         "title": "Set up Somfy UAI+",
         "description": "Enter the IP address of your Somfy UAI+ controller",
         "data": {
-          "host": "IP Address"
+          "host": "IP Address",
+          "api_type": "API Type"
         }
       }
     },
@@ -26,6 +27,7 @@
         "description": "Update the IP address and scan interval of your Somfy UAI+ controller. Current IP: {current_host}",
         "data": {
           "host": "IP Address",
+          "api_type": "API Type",
           "scan_interval": "Scan Interval (5-300 seconds)"
         },
         "data_description": {

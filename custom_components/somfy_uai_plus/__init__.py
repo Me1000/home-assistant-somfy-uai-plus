@@ -6,8 +6,15 @@ from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import SomfyUAIClient
-from .const import DOMAIN, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+from .api import SomfyUAIClient, TelnetSomfyUAIClient
+from .const import (
+    DOMAIN, 
+    CONF_SCAN_INTERVAL, 
+    DEFAULT_SCAN_INTERVAL, 
+    CONF_PROTOCOL, 
+    PROTOCOL_TELNET, 
+    DEFAULT_PROTOCOL
+)
 from .coordinator import SomfyUAICoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,10 +25,14 @@ PLATFORMS: list[Platform] = [Platform.COVER]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Somfy UAI+ from a config entry."""
     host = entry.data[CONF_HOST]
+    protocol = entry.data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)
     
-    # Create API client
-    session = async_get_clientsession(hass)
-    client = SomfyUAIClient(host, session)
+    # Create API client based on protocol
+    if protocol == PROTOCOL_TELNET:
+        client = TelnetSomfyUAIClient(host)
+    else:
+        session = async_get_clientsession(hass)
+        client = SomfyUAIClient(host, session)
     
     # Get scan interval from options
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -44,6 +55,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        # Clean up telnet connection if needed
+        if hasattr(coordinator.client, 'close'):
+            await coordinator.client.close()
     
     return unload_ok
