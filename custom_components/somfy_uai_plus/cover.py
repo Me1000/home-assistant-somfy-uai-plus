@@ -58,6 +58,13 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
             | CoverEntityFeature.SET_POSITION
             | CoverEntityFeature.STOP
         )
+        self._optimistic_position = None
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        # Clear optimistic position when we get fresh data
+        self._optimistic_position = None
+        super()._handle_coordinator_update()
 
     @property
     def device_info(self) -> Dict[str, Any]:
@@ -73,11 +80,32 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
     @property
     def current_cover_position(self) -> Optional[int]:
         """Return current position of cover (0-100)."""
+        # Use optimistic position if available, otherwise use coordinator data
+        if self._optimistic_position is not None:
+            return self._optimistic_position
+        
         if self._node_id in self.coordinator.data:
-            somfy_position = self.coordinator.data[self._node_id].get("position")
-            if somfy_position is not None:
-                # Convert Somfy position (0=open, 100=closed) to HA position (0=closed, 100=open)
-                return 100 - somfy_position
+            device_data = self.coordinator.data[self._node_id]
+            raw_position = device_data.get("raw_position")
+            limits_up = int(device_data.get("limits_up", 0))
+            limits_down = int(device_data.get("limits_down", 10))
+            direction = device_data.get("direction", "STANDARD")
+            
+            if raw_position is not None and limits_down > limits_up:
+                # Calculate percentage from raw position and limits
+                position_range = limits_down - limits_up
+                relative_position = raw_position - limits_up
+                device_percentage = (relative_position / position_range) * 100
+                
+                # Convert to HA position based on device direction
+                if direction == "REVERSED":
+                    # Reversed: device 0% = HA 100% (open), device 100% = HA 0% (closed)
+                    ha_position = 100 - device_percentage
+                else:
+                    # Standard: device 0% = HA 0% (closed), device 100% = HA 100% (open)
+                    ha_position = device_percentage
+                    
+                return max(0, min(100, int(ha_position)))
         return None
 
     @property
@@ -98,22 +126,68 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
-        # Convert HA open (100) to Somfy open (0)
-        await self.coordinator.client.set_position(self._node_id, 0)
+        # Set optimistic position immediately
+        self._optimistic_position = 100
+        self.async_write_ha_state()
+        
+        # Get device limits from coordinator data
+        device_data = self.coordinator.data.get(self._node_id, {})
+        limits_down = int(device_data.get("limits_down", 10))
+        direction = device_data.get("direction", "STANDARD")
+        
+        # Convert HA open (100) based on device direction
+        if direction == "REVERSED":
+            device_position = 0  # Reversed: open = 0
+        else:
+            device_position = limits_down  # Standard: open = limits_down
+            
+        await self.coordinator.client.set_position_raw(self._node_id, device_position)
         await self.coordinator.async_request_refresh()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
-        # Convert HA close (0) to Somfy close (100)
-        await self.coordinator.client.set_position(self._node_id, 100)
+        # Set optimistic position immediately
+        self._optimistic_position = 0
+        self.async_write_ha_state()
+        
+        # Get device limits from coordinator data
+        device_data = self.coordinator.data.get(self._node_id, {})
+        limits_down = int(device_data.get("limits_down", 10))
+        direction = device_data.get("direction", "STANDARD")
+        
+        # Convert HA close (0) based on device direction
+        if direction == "REVERSED":
+            device_position = limits_down  # Reversed: close = limits_down
+        else:
+            device_position = 0  # Standard: close = 0
+            
+        await self.coordinator.client.set_position_raw(self._node_id, device_position)
         await self.coordinator.async_request_refresh()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position."""
         ha_position = kwargs.get("position", 0)
-        # Convert HA position (0=closed, 100=open) to Somfy position (0=open, 100=closed)
-        somfy_position = 100 - ha_position
-        await self.coordinator.client.set_position(self._node_id, somfy_position)
+        
+        # Set optimistic position immediately
+        self._optimistic_position = ha_position
+        self.async_write_ha_state()
+        
+        # Get device limits from coordinator data
+        device_data = self.coordinator.data.get(self._node_id, {})
+        limits_down = int(device_data.get("limits_down", 10))
+        direction = device_data.get("direction", "STANDARD")
+        
+        # Convert HA position based on device direction
+        if direction == "REVERSED":
+            # For reversed motors: HA 0%=closed maps to device 100% of limits_down
+            device_position = int((100 - ha_position) * limits_down / 100)
+        else:
+            # For standard motors: HA 0%=closed maps to device 0% of limits_down  
+            device_position = int(ha_position * limits_down / 100)
+            
+        _LOGGER.info("Setting position: HA %s%% -> device %s (direction=%s, limits_down=%s)", 
+                     ha_position, device_position, direction, limits_down)
+        await self.coordinator.client.set_position_raw(self._node_id, device_position)
         await self.coordinator.async_request_refresh()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
@@ -122,9 +196,18 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
         # We could potentially send the current position to stop movement
         current_ha_position = self.current_cover_position
         if current_ha_position is not None:
-            # Convert current HA position back to Somfy position
-            current_somfy_position = 100 - current_ha_position
-            await self.coordinator.client.set_position(self._node_id, current_somfy_position)
+            # Get device limits from coordinator data
+            device_data = self.coordinator.data.get(self._node_id, {})
+            limits_down = int(device_data.get("limits_down", 10))
+            direction = device_data.get("direction", "STANDARD")
+            
+            # Convert current HA position to device position
+            if direction == "REVERSED":
+                device_position = int((100 - current_ha_position) * limits_down / 100)
+            else:
+                device_position = int(current_ha_position * limits_down / 100)
+                
+            await self.coordinator.client.set_position_raw(self._node_id, device_position)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
