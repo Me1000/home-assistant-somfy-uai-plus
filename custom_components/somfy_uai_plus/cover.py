@@ -62,8 +62,38 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Clear optimistic position when we get fresh data
-        self._optimistic_position = None
+        # Only clear optimistic position if the real position is close to what we expect
+        if self._optimistic_position is not None:
+            real_position = None
+            if self._node_id in self.coordinator.data:
+                device_data = self.coordinator.data[self._node_id]
+                
+                # Get real position based on client type
+                if device_data.get("is_telnet_client", False):
+                    real_position = device_data.get("position", 0)
+                else:
+                    # Calculate for HTTP clients (existing logic)
+                    raw_position = device_data.get("raw_position")
+                    limits_up = int(device_data.get("limits_up", 0))
+                    limits_down = int(device_data.get("limits_down", 10))
+                    direction = device_data.get("direction", "STANDARD")
+                    
+                    if raw_position is not None and limits_down > limits_up:
+                        position_range = limits_down - limits_up
+                        relative_position = raw_position - limits_up
+                        device_percentage = (relative_position / position_range) * 100
+                        
+                        if direction == "REVERSED":
+                            real_position = 100 - device_percentage
+                        else:
+                            real_position = device_percentage
+            
+            # Clear optimistic position if real position is within 5% of expected
+            if real_position is not None:
+                position_diff = abs(real_position - self._optimistic_position)
+                if position_diff <= 5:  # Within 5% tolerance
+                    self._optimistic_position = None
+        
         super()._handle_coordinator_update()
 
     @property
@@ -149,7 +179,8 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
             device_position = limits_down  # Standard: open = limits_down
             
         await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        await self.coordinator.async_request_refresh()
+        # Don't immediately refresh - let coordinator poll on its normal schedule
+        # This preserves the optimistic position for better UX
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
@@ -169,7 +200,8 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
             device_position = 0  # Standard: close = 0
             
         await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        await self.coordinator.async_request_refresh()
+        # Don't immediately refresh - let coordinator poll on its normal schedule
+        # This preserves the optimistic position for better UX
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position."""
@@ -195,7 +227,8 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
         _LOGGER.info("Setting position: HA %s%% -> device %s (direction=%s, limits_down=%s)", 
                      ha_position, device_position, direction, limits_down)
         await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        await self.coordinator.async_request_refresh()
+        # Don't immediately refresh - let coordinator poll on its normal schedule
+        # This preserves the optimistic position for better UX
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
