@@ -1,0 +1,112 @@
+Client connected: ::ffff:10.1.1.40:25148
+Connected to target server 10.1.1.50:23
+Target -> Client: User:
+Client -> Target: Telnet 1
+Target -> Client: Password:
+Client -> Target: Password 1
+Target -> Client: Connected:
+
+Client -> Target: {"method":"sdn.status.ping","params":[{"targetID":"*"}],"id":8901}
+Target -> Client: { "result" : [ "13255B","132B3A","132767","1329FB","132A01","1326E3"],"id":8901}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"13255B"}],"id":8902}
+Target -> Client: { "result" : { "name" : "BEDROOM 2","type":"Sonesse 50DC"},"id":8902}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"13255B"}],"id":8903}
+Target -> Client: {"result":100,"id":8903}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"13255B"}],"id":8904}
+Target -> Client: {"result":[],"id":8904}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132B3A"}],"id":8905}
+Target -> Client: { "result" : { "name" : "MASTER SUITE","type":"Sonesse 50DC"},"id":8905}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132B3A"}],"id":8906}
+Target -> Client: {"result":100,"id":8906}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132B3A"}],"id":8907}
+Target -> Client: {"result":[],"id":8907}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132767"}],"id":8908}
+Target -> Client: { "result" : { "name" : "BEDROOM 2 DOOR","type":"Sonesse 50DC"},"id":8908}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132767"}],"id":8909}
+Target -> Client: {"result":100,"id":8909}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132767"}],"id":8910}
+Target -> Client: {"result":[],"id":8910}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"1329FB"}],"id":8911}
+Target -> Client: { "result" : { "name" : "LIVING ROOM","type":"Sonesse 50DC"},"id":8911}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1329FB"}],"id":8912}
+Target -> Client: {"result":96,"id":8912}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"1329FB"}],"id":8913}
+Target -> Client: {"result":[],"id":8913}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132A01"}],"id":8914}
+Target -> Client: { "result" : { "name" : "KITCHEN","type":"Sonesse 50DC"},"id":8914}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132A01"}],"id":8915}
+Target -> Client: {"result":100,"id":8915}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132A01"}],"id":8916}
+Target -> Client: {"result":[],"id":8916}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"1326E3"}],"id":8917}
+Target -> Client: { "result" : { "name" : "BATHROOM","type":"Sonesse 50DC"},"id":8917}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1326E3"}],"id":8918}
+Target -> Client: {"result":100,"id":8918}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"1326E3"}],"id":8919}
+Target -> Client: {"result":[],"id":8919}
+Target -> Client: { "result" : [ "13255B","132B3A","132767","1329FB","132A01","1326E3"],"id":27538}
+Client disconnected: ::ffff:10.1.1.40:25148
+Target server disconnected
+Client connected: ::ffff:10.1.1.40:25154
+Connected to target server 10.1.1.50:23
+Target -> Client: User:
+Client -> Target: Telnet 1
+Target -> Client: Password:
+Client -> Target: Password 1
+Target -> Client: Connected:
+
+Client -> Target: {"method":"sdn.status.ping","params":[{"targetID":"*"}],"id":8920}
+Target -> Client: { "result" : [ "13255B","132B3A","132767","1329FB","132A01","1326E3"],"id":8920}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"13255B"}],"id":8921}
+Target -> Client: { "result" : { "name" : "BEDROOM 2","type":"Sonesse 50DC"},"id":8921}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"13255B"}],"id":8922}
+Target -> Client: {"result":100,"id":8922}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"13255B"}],"id":8923}
+Target -> Client: {"result":[],"id":8923}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132B3A"}],"id":8924}
+Target -> Client: { "result" : { "name" : "MASTER SUITE","type":"Sonesse 50DC"},"id":8924}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132B3A"}],"id":8925}
+Target -> Client: {"result":100,"id":8925}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132B3A"}],"id":8926}
+Target -> Client: {"result":[],"id":8926}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132767"}],"id":8927}
+Target -> Client: { "result" : { "name" : "BEDROOM 2 DOOR","type":"Sonesse 50DC"},"id":8927}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132767"}],"id":8928}
+Target -> Client: {"result":100,"id":8928}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132767"}],"id":8929}
+Target -> Client: {"result":[],"id":8929}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"1329FB"}],"id":8930}
+Target -> Client: { "result" : { "name" : "LIVING ROOM","type":"Sonesse 50DC"},"id":8930}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1329FB"}],"id":8931}
+Target -> Client: {"result":96,"id":8931}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"1329FB"}],"id":8932}
+Target -> Client: {"result":[],"id":8932}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"132A01"}],"id":8933}
+Target -> Client: { "result" : { "name" : "KITCHEN","type":"Sonesse 50DC"},"id":8933}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132A01"}],"id":8934}
+Target -> Client: {"result":100,"id":8934}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"132A01"}],"id":8935}
+Target -> Client: {"result":[],"id":8935}
+Client -> Target: {"method":"sdn.status.info","params":[{"targetID":"1326E3"}],"id":8936}
+Target -> Client: { "result" : { "name" : "BATHROOM","type":"Sonesse 50DC"},"id":8936}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1326E3"}],"id":8937}
+Target -> Client: {"result":100,"id":8937}
+Client -> Target: {"method":"sdn.group.get","params":[{"targetID":"1326E3"}],"id":8938}
+Target -> Client: {"result":[],"id":8938}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"13255B"}],"id":8939}
+Target -> Client: {"result":100,"id":8939}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132B3A"}],"id":8940}
+Target -> Client: {"result":100,"id":8940}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132767"}],"id":8941}
+Target -> Client: {"result":100,"id":8941}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1329FB"}],"id":8942}
+Target -> Client: {"result":96,"id":8942}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"132A01"}],"id":8943}
+Target -> Client: {"result":100,"id":8943}
+Client -> Target: {"method":"sdn.status.position","params":[{"targetID":"1326E3"}],"id":8944}
+Target -> Client: {"result":100,"id":8944}
+Client -> Target: {"method":"sdn.move.to","params":[{"targetID":"1329FB"},{"position":95},{"type":"percent"},{"seq":52}],"id":8945}
+Target -> Client: {"result":true,"id":8945}
+Client -> Target: {"method":"sdn.move.to","params":[{"targetID":"1329FB"},{"position":95},{"type":"percent"},{"seq":52}],"id":8946}
+Target -> Client: {"result":true,"id":8946}
+Target -> Client: {"method": "sdn.status.position", "params": {"seq": 52,"position":95}}
