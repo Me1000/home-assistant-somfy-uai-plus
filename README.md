@@ -1,72 +1,91 @@
 # Somfy UAI+ Home Assistant Integration
 
-A Home Assistant custom component for controlling Somfy shades through the UAI+ controller.
+A custom Home Assistant integration for controlling Somfy motorized shades, blinds, and other window coverings through the Somfy UAI+ (Universal Automation Interface) controller.
+
+Almost all of the code in this repo was written by Claude Code, I make no claims about it's quality but it works to control my blinds in my home.
 
 ## Features
 
-- **Easy Setup**: Simple IP address configuration through Home Assistant UI
-- **Auto-Discovery**: Automatically discovers all connected shades
-- **Full Control**: Open, close, and set precise positions (0-100%)
-- **Room Assignment**: Assign shades to specific rooms in Home Assistant
-- **Real-time Updates**: Automatic polling for position updates
-- **Device Information**: Shows device type, lock status, and limits
+- **Full shade control**: Open, close, set position, and stop shades
+- **Multiple protocols**: Supports both HTTP and Telnet communication
+- **Device discovery**: Automatically discovers all connected Somfy devices
+- **Position tracking**: Real-time position updates with optimistic UI feedback
+- **Direction support**: Handles both standard and reversed motor directions
+- **Local control**: Communicates directly with your UAI+ controller (no cloud required)
+
+## Supported Devices
+
+This integration works with Somfy devices connected to a UAI+ controller, including:
+- Motorized shades and blinds
+- Awnings and exterior shades
+- Skylights and roof windows
+- Any Somfy RTS or io-enabled window covering
 
 ## Installation
 
-### Method 1: HACS (Recommended)
+### Via HACS (Recommended)
 
-1. Open HACS in Home Assistant
-2. Go to "Integrations"
-3. Click the "+" button and search for "Somfy UAI+"
-4. Install the integration
-5. Restart Home Assistant
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=me1000&repository=home-assistant-somfy-uai-plus&category=integration)
 
-### Method 2: Manual Installation
+1. **Add custom repository**:
+   - Open HACS in Home Assistant
+   - Go to "Integrations" tab
+   - Click the three dots menu (⋮) in the top right
+   - Select "Custom repositories"
+   - Add repository URL: `https://github.com/me1000/home-assistant-somfy-uai-plus`
+   - Select category: "Integration"
+   - Click "Add"
 
-1. Download the latest release from [GitHub](https://github.com/me1000/somfy-uai-plus)
-2. Extract the `somfy_uai_plus` folder to your `custom_components` directory
-3. Restart Home Assistant
+2. **Install the integration**:
+   - Search for "Somfy UAI+" in HACS
+   - Click "Download"
+   - Restart Home Assistant
+
+3. **Configure the integration**:
+   - Go to Settings → Devices & Services
+   - Click "Add Integration"
+   - Search for "Somfy UAI+"
+   - Enter your UAI+ controller's IP address
+   - Choose communication protocol (HTTP or Telnet)
+   - Configure scan interval (default: 30 seconds)
+
+### Manual Installation
+
+1. Copy the `custom_components/somfy_uai_plus` directory to your Home Assistant `custom_components` directory
+2. Restart Home Assistant
+3. Add the integration through the UI as described above
 
 ## Configuration
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **Add Integration**
-3. Search for "Somfy UAI+"
-4. Enter your UAI+ controller IP address (e.g., `10.1.1.50`)
-5. Click **Submit**
+### Basic Setup
 
-The integration will automatically discover all connected shades and create cover entities for each one.
+The integration requires minimal configuration:
+
+- **Host**: IP address of your Somfy UAI+ controller
+- **Protocol**: Choose between HTTP (default) or Telnet
+- **Scan Interval**: How often to poll for device updates (default: 30 seconds)
+
+### Protocol Selection
+
+- **HTTP**: Basic functionality, but has known issues with large position values
+- **Telnet**: **Recommended** - More reliable and more accurate position reporting
 
 ## Usage
 
-Once configured, you'll have cover entities for each shade that support:
+Once configured, your Somfy devices will appear as cover entities in Home Assistant with the following features:
 
-- **Open/Close**: Basic up/down controls
-- **Position**: Set exact position (0-100%)
-- **Stop**: Stop movement (sends current position command)
+### Cover Controls
+- **Open/Close**: Fully open or close the shade
+- **Set Position**: Move to any position between 0-100%
+- **Stop**: Stop the shade at current position
 
-### Automation Example
-
-```yaml
-# Open bedroom shades at sunrise
-automation:
-  - alias: "Open bedroom shades at sunrise"
-    trigger:
-      platform: sun
-      event: sunrise
-    action:
-      service: cover.open_cover
-      target:
-        entity_id: cover.bedroom_2
-```
-
-## API Endpoints
-
-The integration uses these UAI+ controller endpoints:
-
-- `GET /somfy_devices.json` - List all devices
-- `GET /somfy_device.json?{NODE_ID}` - Get device details
-- `GET /somfy.cgi?{NODE_ID}:POSITION={VALUE}` - Control position
+### Device Information
+- Device name and model
+- Serial number
+- Current position
+- Direction (standard or reversed)
+- Lock status
+- Position limits
 
 ## Device Information
 
@@ -80,23 +99,30 @@ Each shade provides additional information:
 
 ## Troubleshooting
 
-### Connection Issues
+### Common Issues
 
-- Verify the IP address is correct
-- Ensure the UAI+ controller is on the same network
-- Check firewall settings
+**Shades wont move to a specific position**:
+- Try switching to the Telnet protocol. The HTTP API that Somfy provides is buggy.
 
-### Shades Not Responding
+## Protocol Information
 
-- Verify shades are properly paired with the controller
-- Check controller web interface directly
-- Restart the Home Assistant integration
+This integration supports two communication protocols with the UAI+ controller:
 
-### Position Accuracy
+### HTTP Protocol
+- **Source**: Reverse engineered from the Somfy UAI+ web dashboard
+- **Stability**: Generally stable but has known issues
+- **Known Issues**: Buggy with certain large position values (this is also broken in the official web UI)
+- **Recommendation**: Use for basic functionality, but Telnet is preferred for reliability
 
-- The integration converts between percentage (0-100%) and device units
-- Some shades may have slightly different limit ranges
-- Calibrate limits through the Somfy controller if needed
+### Telnet Protocol (Recommended) 
+- **Source**: Reverse engineered from network traffic analysis
+- **Stability**: More reliable than HTTP, especially for position commands
+- **Performance**: More accurate position reporting
+- **Recommendation**: **Preferred protocol** for best reliability
+
+I reverse engineered this protocol by setting up a proxy server between a Crestron Home device with the Somfy UAI+ driver
+and the UAI+ and just inspected the messages. The work and protocol documentation can be found in 
+the `reverse-engineered-protocols/` directory of this repository.
 
 ## Development
 
@@ -117,21 +143,6 @@ Uses Home Assistant's `DataUpdateCoordinator` for:
 - Automatic error recovery
 - Coordinated updates across all entities
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For issues and support:
-
-- [GitHub Issues](https://github.com/me1000/somfy-uai-plus/issues)
-- [Home Assistant Community](https://community.home-assistant.io/)
