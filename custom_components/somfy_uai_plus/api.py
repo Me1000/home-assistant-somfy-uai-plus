@@ -145,11 +145,24 @@ class SomfyUAIClient:
             return False
 
 
-class TelnetSomfyUAIClient:
-    """Client for communicating with Somfy UAI+ controller via telnet protocol."""
-
+class TelnetConnectionManager:
+    """Shared connection manager for telnet protocol."""
+    _instances: Dict[str, "TelnetConnectionManager"] = {}
+    _locks: Dict[str, asyncio.Lock] = {}
+    
+    def __new__(cls, host: str, port: int = 23, username: str = "Telnet 1", password: str = "Password 1"):
+        """Singleton per host to share connections."""
+        key = f"{host}:{port}"
+        if key not in cls._instances:
+            cls._instances[key] = super().__new__(cls)
+            cls._locks[key] = asyncio.Lock()
+        return cls._instances[key]
+    
     def __init__(self, host: str, port: int = 23, username: str = "Telnet 1", password: str = "Password 1") -> None:
-        """Initialize the telnet client."""
+        """Initialize the connection manager."""
+        if hasattr(self, '_initialized'):
+            return
+        
         self.host = host
         self.port = port
         self.username = username
@@ -160,6 +173,10 @@ class TelnetSomfyUAIClient:
         self._pending_requests: Dict[int, asyncio.Future] = {}
         self._read_task: Optional[asyncio.Task] = None
         self._connected = False
+        self._request_queue = asyncio.Queue()
+        self._queue_task: Optional[asyncio.Task] = None
+        self._request_lock = asyncio.Lock()
+        self._initialized = True
 
     async def _connect(self) -> bool:
         """Connect to the telnet server and authenticate."""
@@ -187,8 +204,9 @@ class TelnetSomfyUAIClient:
             
             self._connected = True
             
-            # Start the response reading task
+            # Start the response reading task and queue processor
             self._read_task = asyncio.create_task(self._read_responses())
+            self._queue_task = asyncio.create_task(self._process_queue())
             
             _LOGGER.info("Successfully connected to telnet server at %s:%s", self.host, self.port)
             return True
@@ -219,6 +237,14 @@ class TelnetSomfyUAIClient:
             except asyncio.CancelledError:
                 pass
             self._read_task = None
+        
+        if self._queue_task:
+            self._queue_task.cancel()
+            try:
+                await self._queue_task
+            except asyncio.CancelledError:
+                pass
+            self._queue_task = None
         
         if self._writer:
             self._writer.close()
@@ -283,41 +309,85 @@ class TelnetSomfyUAIClient:
                 else:
                     future.set_exception(Exception("Invalid JSON-RPC response"))
 
+    async def _process_queue(self) -> None:
+        """Process queued requests sequentially."""
+        try:
+            while self._connected:
+                try:
+                    # Get next request from queue
+                    request_data = await asyncio.wait_for(self._request_queue.get(), timeout=1.0)
+                    
+                    if not self._connected or not self._writer:
+                        # Connection lost, reject request
+                        request_data["future"].set_exception(ConnectionError("Connection lost"))
+                        continue
+                    
+                    try:
+                        # Send request
+                        request_json = json.dumps(request_data["request"]) + "\r\n"
+                        self._writer.write(request_json.encode())
+                        await self._writer.drain()
+                        
+                        # Small delay between requests to avoid overwhelming the device
+                        await asyncio.sleep(0.1)
+                        
+                    except Exception as err:
+                        request_data["future"].set_exception(err)
+                        
+                except asyncio.TimeoutError:
+                    continue
+                except Exception as err:
+                    _LOGGER.error("Error processing request queue: %s", err)
+                    break
+                    
+        finally:
+            # Reject any remaining queued requests
+            while not self._request_queue.empty():
+                try:
+                    request_data = self._request_queue.get_nowait()
+                    request_data["future"].set_exception(ConnectionError("Queue processor stopped"))
+                except asyncio.QueueEmpty:
+                    break
+
     async def _send_request(self, method: str, params: List[Dict[str, Any]]) -> Any:
         """Send a JSON-RPC request and wait for response."""
-        if not self._connected:
-            if not await self._connect():
-                raise ConnectionError("Failed to connect to telnet server")
-        
-        self._request_id += 1
-        request_id = self._request_id
-        
-        request = {
-            "method": method,
-            "params": params,
-            "id": request_id
-        }
-        
-        # Create future for response
-        future = asyncio.Future()
-        self._pending_requests[request_id] = future
-        
-        try:
-            # Send request
-            request_json = json.dumps(request) + "\r\n"
-            self._writer.write(request_json.encode())
-            await self._writer.drain()
+        async with self._request_lock:
+            if not self._connected:
+                if not await self._connect():
+                    raise ConnectionError("Failed to connect to telnet server")
             
-            # Wait for response with timeout
-            result = await asyncio.wait_for(future, timeout=10)
-            return result
+            self._request_id += 1
+            request_id = self._request_id
             
-        except asyncio.TimeoutError:
-            self._pending_requests.pop(request_id, None)
-            raise asyncio.TimeoutError(f"Request {method} timed out")
-        except Exception as err:
-            self._pending_requests.pop(request_id, None)
-            raise err
+            request = {
+                "method": method,
+                "params": params,
+                "id": request_id
+            }
+            
+            # Create future for response
+            future = asyncio.Future()
+            self._pending_requests[request_id] = future
+            
+            # Queue the request for sequential processing
+            request_data = {
+                "request": request,
+                "future": future
+            }
+            
+            try:
+                await self._request_queue.put(request_data)
+                
+                # Wait for response with timeout
+                result = await asyncio.wait_for(future, timeout=10)
+                return result
+                
+            except asyncio.TimeoutError:
+                self._pending_requests.pop(request_id, None)
+                raise asyncio.TimeoutError(f"Request {method} timed out")
+            except Exception as err:
+                self._pending_requests.pop(request_id, None)
+                raise err
 
     async def test_connection(self) -> bool:
         """Test connection to the controller."""
@@ -506,3 +576,36 @@ class TelnetSomfyUAIClient:
     async def close(self) -> None:
         """Close the telnet connection."""
         await self._disconnect()
+
+
+class TelnetSomfyUAIClient:
+    """Client for communicating with Somfy UAI+ controller via telnet protocol."""
+
+    def __init__(self, host: str, port: int = 23, username: str = "Telnet 1", password: str = "Password 1") -> None:
+        """Initialize the telnet client."""
+        self._manager = TelnetConnectionManager(host, port, username, password)
+
+    async def test_connection(self) -> bool:
+        """Test connection to the controller."""
+        return await self._manager.test_connection()
+
+    async def get_devices(self) -> List[Dict[str, Any]]:
+        """Get all available shade devices."""
+        return await self._manager.get_devices()
+
+    async def get_device_info(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Get detailed information for a specific device."""
+        return await self._manager.get_device_info(node_id)
+
+    async def set_position(self, node_id: str, position: int) -> bool:
+        """Set the position of a shade (0-100)."""
+        return await self._manager.set_position(node_id, position)
+
+    async def set_position_raw(self, node_id: str, raw_position: int) -> bool:
+        """Set the raw position of a shade using actual device limits."""
+        return await self._manager.set_position_raw(node_id, raw_position)
+
+    async def close(self) -> None:
+        """Close the telnet connection."""
+        # Don't close the shared connection, just disconnect this client
+        pass
