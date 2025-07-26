@@ -59,6 +59,7 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
             | CoverEntityFeature.STOP
         )
         self._optimistic_position = None
+        self._last_command = None  # Track the last command sent (open, close, set_position, stop)
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -93,6 +94,7 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
                 position_diff = abs(real_position - self._optimistic_position)
                 if position_diff <= 5:  # Within 5% tolerance
                     self._optimistic_position = None
+                    self._last_command = None  # Movement is complete
         
         super()._handle_coordinator_update()
 
@@ -154,17 +156,30 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
     @property
     def is_closing(self) -> bool:
         """Return if the cover is closing."""
-        return False  # API doesn't provide motion state
+        if self._optimistic_position is not None and self._last_command:
+            current_position = self.current_cover_position
+            if current_position != self._optimistic_position:
+                # Cover is moving
+                if self._last_command == "close" or (self._last_command == "set_position" and self._optimistic_position < current_position):
+                    return True
+        return False
 
     @property
     def is_opening(self) -> bool:
         """Return if the cover is opening."""
-        return False  # API doesn't provide motion state
+        if self._optimistic_position is not None and self._last_command:
+            current_position = self.current_cover_position
+            if current_position != self._optimistic_position:
+                # Cover is moving
+                if self._last_command == "open" or (self._last_command == "set_position" and self._optimistic_position > current_position):
+                    return True
+        return False
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
         # Set optimistic position immediately
         self._optimistic_position = 100
+        self._last_command = "open"
         self.async_write_ha_state()
         
         # Get device limits from coordinator data
@@ -186,6 +201,7 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
         """Close the cover."""
         # Set optimistic position immediately
         self._optimistic_position = 0
+        self._last_command = "close"
         self.async_write_ha_state()
         
         # Get device limits from coordinator data
@@ -209,6 +225,7 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
         
         # Set optimistic position immediately
         self._optimistic_position = ha_position
+        self._last_command = "set_position"
         self.async_write_ha_state()
         
         # Get device limits from coordinator data
@@ -233,6 +250,13 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
         await self.coordinator.client.move_stop(self._node_id)
+        
+        # Clear optimistic position since we don't know where it stopped
+        self._optimistic_position = None
+        self._last_command = "stop"
+        
+        # Force coordinator refresh to get actual position immediately
+        await self.coordinator.async_request_refresh()
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
