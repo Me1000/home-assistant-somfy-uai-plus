@@ -232,22 +232,7 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
-        # The API doesn't seem to have a dedicated stop command
-        # We could potentially send the current position to stop movement
-        current_ha_position = self.current_cover_position
-        if current_ha_position is not None:
-            # Get device limits from coordinator data
-            device_data = self.coordinator.data.get(self._node_id, {})
-            limits_down = int(device_data.get("limits_down", 10))
-            direction = device_data.get("direction", "STANDARD")
-            
-            # Convert current HA position to device position
-            if direction == "REVERSED":
-                device_position = int((100 - current_ha_position) * limits_down / 100)
-            else:
-                device_position = int(current_ha_position * limits_down / 100)
-                
-            await self.coordinator.client.set_position_raw(self._node_id, device_position)
+        await self.coordinator.client.move_stop(self._node_id)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:

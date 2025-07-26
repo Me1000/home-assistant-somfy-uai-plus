@@ -110,3 +110,17 @@ Target -> Client: {"result":true,"id":8945}
 Client -> Target: {"method":"sdn.move.to","params":[{"targetID":"1329FB"},{"position":95},{"type":"percent"},{"seq":52}],"id":8946}
 Target -> Client: {"result":true,"id":8946}
 Target -> Client: {"method": "sdn.status.position", "params": {"seq": 52,"position":95}}
+
+
+
+/// Later tested with the up down and stop commands.
+
+Client -> Target: {"method":"sdn.move.down","params":[{"targetID":"1329FB"},{"seq":18}],"id":7466}
+Target -> Client: {"result":true,"id":7466}
+Target -> Client: {"method": "sdn.status.position", "params": {"seq": 18,"position":60}}
+Client -> Target: {"method":"sdn.move.stop","params":[{"targetID":"1329FB"},{"seq":18}],"id":7467}
+Target -> Client: {"result":true,"id":7467}
+Client -> Target: {"method":"sdn.move.up","params":[{"targetID":"1329FB"},{"seq":18}],"id":7468}
+Target -> Client: {"result":true,"id":7468}
+Client -> Target: {"method":"sdn.move.stop","params":[{"targetID":"1329FB"},{"seq":18}],"id":7469}
+Target -> Client: {"result":true,"id":7469}

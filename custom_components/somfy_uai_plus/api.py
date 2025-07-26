@@ -532,6 +532,84 @@ class TelnetConnectionManager:
             _LOGGER.error("Failed to set position for %s: %s", node_id, err)
             return False
 
+    async def move_up(self, node_id: str) -> bool:
+        """Move the shade up."""
+        try:
+            # Convert HTTP API node ID format to telnet format for requests
+            telnet_node_id = self._denormalize_node_id(node_id)
+            
+            _LOGGER.debug("Moving shade %s up", node_id)
+            
+            # Send move up command
+            result = await self._send_request(
+                "sdn.move.up",
+                [{
+                    "targetID": telnet_node_id,
+                    "seq": self._request_id  # Use current request ID as sequence
+                }]
+            )
+            
+            success = result is True or result == "true"
+            if not success:
+                _LOGGER.error("Failed to move %s up: response was %s", node_id, result)
+            return success
+            
+        except Exception as err:
+            _LOGGER.error("Failed to move %s up: %s", node_id, err)
+            return False
+
+    async def move_down(self, node_id: str) -> bool:
+        """Move the shade down."""
+        try:
+            # Convert HTTP API node ID format to telnet format for requests
+            telnet_node_id = self._denormalize_node_id(node_id)
+            
+            _LOGGER.debug("Moving shade %s down", node_id)
+            
+            # Send move down command
+            result = await self._send_request(
+                "sdn.move.down",
+                [{
+                    "targetID": telnet_node_id,
+                    "seq": self._request_id  # Use current request ID as sequence
+                }]
+            )
+            
+            success = result is True or result == "true"
+            if not success:
+                _LOGGER.error("Failed to move %s down: response was %s", node_id, result)
+            return success
+            
+        except Exception as err:
+            _LOGGER.error("Failed to move %s down: %s", node_id, err)
+            return False
+
+    async def move_stop(self, node_id: str) -> bool:
+        """Stop the shade movement."""
+        try:
+            # Convert HTTP API node ID format to telnet format for requests
+            telnet_node_id = self._denormalize_node_id(node_id)
+            
+            _LOGGER.debug("Stopping shade %s movement", node_id)
+            
+            # Send move stop command
+            result = await self._send_request(
+                "sdn.move.stop",
+                [{
+                    "targetID": telnet_node_id,
+                    "seq": self._request_id  # Use current request ID as sequence
+                }]
+            )
+            
+            success = result is True or result == "true"
+            if not success:
+                _LOGGER.error("Failed to stop %s: response was %s", node_id, result)
+            return success
+            
+        except Exception as err:
+            _LOGGER.error("Failed to stop %s: %s", node_id, err)
+            return False
+
     async def set_position_raw(self, node_id: str, raw_position: int) -> bool:
         """Set the raw position of a shade using actual device limits."""
         try:
@@ -604,6 +682,18 @@ class TelnetSomfyUAIClient:
     async def set_position_raw(self, node_id: str, raw_position: int) -> bool:
         """Set the raw position of a shade using actual device limits."""
         return await self._manager.set_position_raw(node_id, raw_position)
+
+    async def move_up(self, node_id: str) -> bool:
+        """Move the shade up."""
+        return await self._manager.move_up(node_id)
+
+    async def move_down(self, node_id: str) -> bool:
+        """Move the shade down."""
+        return await self._manager.move_down(node_id)
+
+    async def move_stop(self, node_id: str) -> bool:
+        """Stop the shade movement."""
+        return await self._manager.move_stop(node_id)
 
     async def close(self) -> None:
         """Close the telnet connection."""
