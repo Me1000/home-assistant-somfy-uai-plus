@@ -1,19 +1,19 @@
 """Cover platform for Somfy UAI+ integration."""
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from homeassistant.components.cover import (
+    CoverDeviceClass,
     CoverEntity,
     CoverEntityFeature,
-    CoverDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER, MODEL
-from .coordinator import SomfyUAICoordinator
+from .coordinator import MovementState, ShadeState, SomfyUAIPlusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,131 +24,82 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Somfy UAI+ cover entities."""
-    coordinator: SomfyUAICoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+    coordinator: SomfyUAIPlusCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+
     # Wait for initial data
     await coordinator.async_config_entry_first_refresh()
-    
-    # Create cover entities for each device
+
+    # Create cover entities for each shade
     entities = []
-    for node_id, device_data in coordinator.data.items():
-        entities.append(SomfyUAICover(coordinator, node_id, device_data))
-    
+    for node_id, shade_state in coordinator.data.shades.items():
+        entities.append(SomfyUAIPlusCover(coordinator, node_id, shade_state))
+
     async_add_entities(entities)
 
 
-class SomfyUAICover(CoordinatorEntity, CoverEntity):
-    """Representation of a Somfy UAI+ cover."""
+class SomfyUAIPlusCover(CoordinatorEntity[SomfyUAIPlusCoordinator], CoverEntity):
+    """Representation of a Somfy UAI+ shade."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = CoverDeviceClass.SHADE
+    _attr_supported_features = (
+        CoverEntityFeature.OPEN
+        | CoverEntityFeature.CLOSE
+        | CoverEntityFeature.SET_POSITION
+        | CoverEntityFeature.STOP
+    )
 
     def __init__(
         self,
-        coordinator: SomfyUAICoordinator,
+        coordinator: SomfyUAIPlusCoordinator,
         node_id: str,
-        device_data: Dict[str, Any],
+        shade_state: ShadeState,
     ) -> None:
         """Initialize the cover."""
         super().__init__(coordinator)
         self._node_id = node_id
         self._attr_unique_id = f"{DOMAIN}_{node_id}"
-        self._attr_name = device_data.get("label", f"Shade {node_id}")
-        self._attr_device_class = CoverDeviceClass.SHADE
-        self._attr_supported_features = (
-            CoverEntityFeature.OPEN
-            | CoverEntityFeature.CLOSE
-            | CoverEntityFeature.SET_POSITION
-            | CoverEntityFeature.STOP
-        )
-        self._optimistic_position = None
-        self._last_command = None  # Track the last command sent (open, close, set_position, stop)
-
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        # Only clear optimistic position if the real position is close to what we expect
-        if self._optimistic_position is not None:
-            real_position = None
-            if self._node_id in self.coordinator.data:
-                device_data = self.coordinator.data[self._node_id]
-                
-                # Get real position based on client type
-                if device_data.get("is_telnet_client", False):
-                    real_position = device_data.get("position", 0)
-                else:
-                    # Calculate for HTTP clients (existing logic)
-                    raw_position = device_data.get("raw_position")
-                    limits_up = int(device_data.get("limits_up", 0))
-                    limits_down = int(device_data.get("limits_down", 10))
-                    direction = device_data.get("direction", "STANDARD")
-                    
-                    if raw_position is not None and limits_down > limits_up:
-                        position_range = limits_down - limits_up
-                        relative_position = raw_position - limits_up
-                        device_percentage = (relative_position / position_range) * 100
-                        
-                        if direction == "REVERSED":
-                            real_position = 100 - device_percentage
-                        else:
-                            real_position = device_percentage
-            
-            # Clear optimistic position if real position is within 5% of expected
-            if real_position is not None:
-                position_diff = abs(real_position - self._optimistic_position)
-                if position_diff <= 5:  # Within 5% tolerance
-                    self._optimistic_position = None
-                    self._last_command = None  # Movement is complete
-        
-        super()._handle_coordinator_update()
+        # Set name to None so entity uses the device name
+        # This allows users to rename via the device and have the entity follow
+        self._attr_name = None
+        # Store the initial name for device_info
+        self._initial_name = shade_state.name
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def _shade(self) -> ShadeState | None:
+        """Get the current shade state from the coordinator."""
+        return self.coordinator.get_shade(self._node_id)
+
+    @property
+    def device_info(self) -> dict[str, Any]:
         """Return device information."""
+        shade = self._shade
         return {
             "identifiers": {(DOMAIN, self._node_id)},
-            "name": self._attr_name,
+            "name": shade.name if shade else self._initial_name,
             "manufacturer": MANUFACTURER,
-            "model": MODEL,
-            "sw_version": self.coordinator.data.get(self._node_id, {}).get("serial_number"),
+            "model": shade.device_type if shade else MODEL,
         }
 
     @property
-    def current_cover_position(self) -> Optional[int]:
-        """Return current position of cover (0-100)."""
-        # Use optimistic position if available, otherwise use coordinator data
-        if self._optimistic_position is not None:
-            return self._optimistic_position
-        
-        if self._node_id in self.coordinator.data:
-            device_data = self.coordinator.data[self._node_id]
-            
-            # For telnet clients, use percentage directly since raw position isn't meaningful
-            if device_data.get("is_telnet_client", False):
-                percentage = device_data.get("position", 0)
-                return max(0, min(100, int(percentage)))
-            
-            # For HTTP clients, calculate from raw position and limits
-            raw_position = device_data.get("raw_position")
-            limits_up = int(device_data.get("limits_up", 0))
-            limits_down = int(device_data.get("limits_down", 10))
-            direction = device_data.get("direction", "STANDARD")
-            
-            if raw_position is not None and limits_down > limits_up:
-                # Calculate percentage from raw position and limits
-                position_range = limits_down - limits_up
-                relative_position = raw_position - limits_up
-                device_percentage = (relative_position / position_range) * 100
-                
-                # Convert to HA position based on device direction
-                if direction == "REVERSED":
-                    # Reversed: device 0% = HA 100% (open), device 100% = HA 0% (closed)
-                    ha_position = 100 - device_percentage
-                else:
-                    # Standard: device 0% = HA 0% (closed), device 100% = HA 100% (open)
-                    ha_position = device_percentage
-                    
-                return max(0, min(100, int(ha_position)))
-        return None
+    def current_cover_position(self) -> int | None:
+        """Return current position of cover (0=closed, 100=open).
+
+        While the shade is moving, returns the target position.
+        Once movement stops, returns the actual position.
+        """
+        shade = self._shade
+        if not shade:
+            return None
+
+        # Return target position while moving, actual position when idle
+        if shade.movement_state != MovementState.IDLE and shade.target_position is not None:
+            return shade.target_position
+
+        return shade.position
 
     @property
-    def is_closed(self) -> Optional[bool]:
+    def is_closed(self) -> bool | None:
         """Return if the cover is closed."""
         position = self.current_cover_position
         return position == 0 if position is not None else None
@@ -156,120 +107,102 @@ class SomfyUAICover(CoordinatorEntity, CoverEntity):
     @property
     def is_closing(self) -> bool:
         """Return if the cover is closing."""
-        if self._optimistic_position is not None and self._last_command:
-            current_position = self.current_cover_position
-            if current_position != self._optimistic_position:
-                # Cover is moving
-                if self._last_command == "close" or (self._last_command == "set_position" and self._optimistic_position < current_position):
-                    return True
-        return False
+        shade = self._shade
+        return shade.movement_state == MovementState.CLOSING if shade else False
 
     @property
     def is_opening(self) -> bool:
         """Return if the cover is opening."""
-        if self._optimistic_position is not None and self._last_command:
-            current_position = self.current_cover_position
-            if current_position != self._optimistic_position:
-                # Cover is moving
-                if self._last_command == "open" or (self._last_command == "set_position" and self._optimistic_position > current_position):
-                    return True
-        return False
+        shade = self._shade
+        return shade.movement_state == MovementState.OPENING if shade else False
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
-        # Set optimistic position immediately
-        self._optimistic_position = 100
-        self._last_command = "open"
+        _LOGGER.debug("Opening shade %s", self._node_id)
+
+        # Mark as moving before sending command
+        self.coordinator.set_shade_moving(
+            self._node_id, target_position=100, opening=True
+        )
         self.async_write_ha_state()
-        
-        # Get device limits from coordinator data
-        device_data = self.coordinator.data.get(self._node_id, {})
-        limits_down = int(device_data.get("limits_down", 10))
-        direction = device_data.get("direction", "STANDARD")
-        
-        # Convert HA open (100) based on device direction
-        if direction == "REVERSED":
-            device_position = 0  # Reversed: open = 0
-        else:
-            device_position = limits_down  # Standard: open = limits_down
-            
-        await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        # Don't immediately refresh - let coordinator poll on its normal schedule
-        # This preserves the optimistic position for better UX
+
+        # Send command
+        await self.coordinator.api.open_shade(self._node_id)
+
+        # Request immediate refresh to start tracking
+        await self.coordinator.async_request_refresh()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
-        # Set optimistic position immediately
-        self._optimistic_position = 0
-        self._last_command = "close"
+        _LOGGER.debug("Closing shade %s", self._node_id)
+
+        # Mark as moving before sending command
+        self.coordinator.set_shade_moving(
+            self._node_id, target_position=0, opening=False
+        )
         self.async_write_ha_state()
-        
-        # Get device limits from coordinator data
-        device_data = self.coordinator.data.get(self._node_id, {})
-        limits_down = int(device_data.get("limits_down", 10))
-        direction = device_data.get("direction", "STANDARD")
-        
-        # Convert HA close (0) based on device direction
-        if direction == "REVERSED":
-            device_position = limits_down  # Reversed: close = limits_down
-        else:
-            device_position = 0  # Standard: close = 0
-            
-        await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        # Don't immediately refresh - let coordinator poll on its normal schedule
-        # This preserves the optimistic position for better UX
+
+        # Send command
+        await self.coordinator.api.close_shade(self._node_id)
+
+        # Request immediate refresh to start tracking
+        await self.coordinator.async_request_refresh()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move the cover to a specific position."""
-        ha_position = kwargs.get("position", 0)
-        
-        # Set optimistic position immediately
-        self._optimistic_position = ha_position
-        self._last_command = "set_position"
+        position = kwargs.get("position", 0)
+        _LOGGER.debug("Setting shade %s to position %s", self._node_id, position)
+
+        shade = self._shade
+        current_position = shade.position if shade else 0
+        opening = position > current_position
+
+        # Mark as moving before sending command
+        self.coordinator.set_shade_moving(
+            self._node_id, target_position=position, opening=opening
+        )
         self.async_write_ha_state()
-        
-        # Get device limits from coordinator data
-        device_data = self.coordinator.data.get(self._node_id, {})
-        limits_down = int(device_data.get("limits_down", 10))
-        direction = device_data.get("direction", "STANDARD")
-        
-        # Convert HA position based on device direction
-        if direction == "REVERSED":
-            # For reversed motors: HA 0%=closed maps to device 100% of limits_down
-            device_position = int((100 - ha_position) * limits_down / 100)
-        else:
-            # For standard motors: HA 0%=closed maps to device 0% of limits_down  
-            device_position = int(ha_position * limits_down / 100)
-            
-        _LOGGER.info("Setting position: HA %s%% -> device %s (direction=%s, limits_down=%s)", 
-                     ha_position, device_position, direction, limits_down)
-        await self.coordinator.client.set_position_raw(self._node_id, device_position)
-        # Don't immediately refresh - let coordinator poll on its normal schedule
-        # This preserves the optimistic position for better UX
+
+        # Send command
+        await self.coordinator.api.set_position(self._node_id, position)
+
+        # Request immediate refresh to start tracking
+        await self.coordinator.async_request_refresh()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
-        await self.coordinator.client.move_stop(self._node_id)
-        
-        # Clear optimistic position since we don't know where it stopped
-        self._optimistic_position = None
-        self._last_command = "stop"
-        
-        # Force coordinator refresh to get actual position immediately
+        _LOGGER.debug("Stopping shade %s", self._node_id)
+
+        # Send stop command
+        await self.coordinator.api.stop_shade(self._node_id)
+
+        # Mark as stopped
+        self.coordinator.set_shade_stopped(self._node_id)
+        self.async_write_ha_state()
+
+        # Request immediate refresh to get current position
         await self.coordinator.async_request_refresh()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
-        if self._node_id not in self.coordinator.data:
+        shade = self._shade
+        if not shade:
             return {}
-        
-        device_data = self.coordinator.data[self._node_id]
-        return {
+
+        attrs = {
             "node_id": self._node_id,
-            "device_type": device_data.get("type"),
-            "lock_status": device_data.get("lock"),
-            "direction": device_data.get("direction"),
-            "limits_up": device_data.get("limits_up"),
-            "limits_down": device_data.get("limits_down"),
+            "device_type": shade.device_type,
         }
+
+        if shade.target_position is not None:
+            attrs["target_position"] = shade.target_position
+
+        return attrs
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        # The coordinator handles movement state tracking internally
+        # Just update our state based on coordinator data
+        super()._handle_coordinator_update()
