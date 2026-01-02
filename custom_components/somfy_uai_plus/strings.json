@@ -3,43 +3,49 @@
     "step": {
       "user": {
         "title": "Set up Somfy UAI+",
-        "description": "Enter the IP address of your Somfy UAI+ controller",
+        "description": "Enter the connection details for your Somfy UAI+ controller.",
         "data": {
           "host": "IP Address",
-          "api_type": "API Type"
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Telnet username (default: Telnet 1)",
+          "password": "Telnet password (default: Password 1)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the Somfy UAI+ controller",
-      "invalid_host": "Invalid IP address format",
-      "timeout": "Connection timeout",
-      "unknown": "Unexpected error occurred"
+      "cannot_connect": "Failed to connect to the Somfy UAI+ controller. Please check the IP address, credentials, and ensure the controller is powered on.",
+      "invalid_host": "Invalid IP address format.",
+      "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "This device is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Update Somfy UAI+ Settings",
-        "description": "Update the IP address and scan interval of your Somfy UAI+ controller. Current IP: {current_host}",
+        "title": "Somfy UAI+ Settings",
+        "description": "Configure your Somfy UAI+ integration settings.",
         "data": {
           "host": "IP Address",
-          "api_type": "API Type",
-          "scan_interval": "Scan Interval (5-300 seconds)"
+          "username": "Username",
+          "password": "Password",
+          "scan_interval": "Scan Interval (seconds)"
         },
         "data_description": {
-          "scan_interval": "How often to check shade positions. Lower values are more responsive but create more network traffic."
+          "username": "Telnet username (default: Telnet 1)",
+          "password": "Telnet password (default: Password 1)",
+          "scan_interval": "How often to poll shade positions. Lower values provide faster movement detection but create more network traffic. Recommended: 5 seconds."
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the Somfy UAI+ controller",
-      "invalid_host": "Invalid IP address format",
-      "timeout": "Connection timeout",
-      "unknown": "Unexpected error occurred"
+      "cannot_connect": "Failed to connect to the Somfy UAI+ controller.",
+      "invalid_host": "Invalid IP address format.",
+      "unknown": "An unexpected error occurred."
     }
   }
 }
