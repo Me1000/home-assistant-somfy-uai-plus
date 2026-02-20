@@ -5,15 +5,15 @@ from datetime import timedelta
 from enum import Enum
 from typing import Any
 
-from homeassistant.components.persistent_notification import async_create, async_dismiss
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     CONSECUTIVE_STABLE_COUNT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    NOTIFICATION_ID_DEGRADED,
+    ISSUE_ID_DEVICE_DEGRADED,
 )
 from .somfy_api import ShadeInfo, SomfyUAIPlusAPI
 
@@ -129,7 +129,7 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     def _set_device_degraded(self) -> None:
-        """Create a persistent notification indicating the device is degraded."""
+        """Create a repair issue indicating the device is degraded."""
         if self._device_degraded:
             return
         self._device_degraded = True
@@ -138,26 +138,23 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
             "state and might need to be restarted",
             self.api.host,
         )
-        async_create(
+        ir.async_create_issue(
             self.hass,
-            (
-                f"The Somfy UAI+ controller at **{self.api.host}** is not "
-                "responding to status checks. The device may be in a degraded "
-                "state and might need to be restarted.\n\n"
-                "Check **Settings → System → Logs** and filter for "
-                "`somfy_uai_plus` for more details."
-            ),
-            title="Somfy UAI+ Not Responding",
-            notification_id=NOTIFICATION_ID_DEGRADED,
+            DOMAIN,
+            ISSUE_ID_DEVICE_DEGRADED,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_ID_DEVICE_DEGRADED,
+            translation_placeholders={"host": self.api.host},
         )
 
     def _clear_device_degraded(self) -> None:
-        """Dismiss the degraded notification if the device has recovered."""
+        """Delete the repair issue if the device has recovered."""
         if not self._device_degraded:
             return
         self._device_degraded = False
         _LOGGER.info("Somfy UAI+ at %s has recovered", self.api.host)
-        async_dismiss(self.hass, NOTIFICATION_ID_DEGRADED)
+        ir.async_delete_issue(self.hass, DOMAIN, ISSUE_ID_DEVICE_DEGRADED)
 
     async def _update_shade(self, node_id: str) -> None:
         """Update state for a single shade."""
