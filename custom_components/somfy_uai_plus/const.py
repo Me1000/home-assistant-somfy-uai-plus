@@ -15,6 +15,9 @@ DEFAULT_PASSWORD = "Password 1"
 MANUFACTURER = "Somfy"
 MODEL = "UAI+"
 
+# Notification IDs
+NOTIFICATION_ID_DEGRADED = "somfy_uai_plus_device_degraded"
+
 # State tracking thresholds
 POSITION_TOLERANCE = 2  # Consider position reached if within this percentage
 CONSECUTIVE_STABLE_COUNT = 2  # Number of same positions to consider movement stopped

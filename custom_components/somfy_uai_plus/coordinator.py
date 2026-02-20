@@ -5,10 +5,16 @@ from datetime import timedelta
 from enum import Enum
 from typing import Any
 
+from homeassistant.components.persistent_notification import async_create, async_dismiss
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import CONSECUTIVE_STABLE_COUNT, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONSECUTIVE_STABLE_COUNT,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    NOTIFICATION_ID_DEGRADED,
+)
 from .somfy_api import ShadeInfo, SomfyUAIPlusAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,16 +93,28 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self.api = api
         self._shade_states: dict[str, ShadeState] = {}
+        self._device_degraded = False
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from API and update shade states."""
         try:
-            # Get all shade IDs
+            # Get all shade IDs (sends sdn.status.ping)
             shade_ids = await self.api.get_shade_ids()
 
             if not shade_ids:
+                if self._shade_states:
+                    # Previously had shades but ping returned nothing — device
+                    # is likely in a degraded state (ping timed out or failed).
+                    self._set_device_degraded()
+                    raise UpdateFailed(
+                        f"Somfy UAI+ at {self.api.host} is not responding "
+                        "to status ping"
+                    )
                 _LOGGER.warning("No shades found")
                 return CoordinatorData(shades=self._shade_states)
+
+            # Device is responding — clear any degraded notification
+            self._clear_device_degraded()
 
             # Update each shade
             for node_id in shade_ids:
@@ -104,8 +122,42 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
             return CoordinatorData(shades=self._shade_states)
 
+        except UpdateFailed:
+            raise
         except Exception as err:
+            self._set_device_degraded()
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+    def _set_device_degraded(self) -> None:
+        """Create a persistent notification indicating the device is degraded."""
+        if self._device_degraded:
+            return
+        self._device_degraded = True
+        _LOGGER.warning(
+            "Somfy UAI+ at %s is not responding — device may be in a degraded "
+            "state and might need to be restarted",
+            self.api.host,
+        )
+        async_create(
+            self.hass,
+            (
+                f"The Somfy UAI+ controller at **{self.api.host}** is not "
+                "responding to status checks. The device may be in a degraded "
+                "state and might need to be restarted.\n\n"
+                "Check **Settings → System → Logs** and filter for "
+                "`somfy_uai_plus` for more details."
+            ),
+            title="Somfy UAI+ Not Responding",
+            notification_id=NOTIFICATION_ID_DEGRADED,
+        )
+
+    def _clear_device_degraded(self) -> None:
+        """Dismiss the degraded notification if the device has recovered."""
+        if not self._device_degraded:
+            return
+        self._device_degraded = False
+        _LOGGER.info("Somfy UAI+ at %s has recovered", self.api.host)
+        async_dismiss(self.hass, NOTIFICATION_ID_DEGRADED)
 
     async def _update_shade(self, node_id: str) -> None:
         """Update state for a single shade."""
