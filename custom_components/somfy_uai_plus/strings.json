@@ -1,4 +1,10 @@
 {
+  "issues": {
+    "device_degraded": {
+      "title": "Somfy UAI+ not responding",
+      "description": "The Somfy UAI+ controller at **{host}** is not responding to status checks. The device may be in a degraded state and might need to be restarted.\n\nCheck **Settings \u2192 System \u2192 Logs** and filter for `somfy_uai_plus` for more details."
+    }
+  },
   "config": {
     "step": {
       "user": {
