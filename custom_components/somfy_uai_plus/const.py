@@ -18,6 +18,9 @@ MODEL = "UAI+"
 # Issue IDs (for Repairs dashboard)
 ISSUE_ID_DEVICE_DEGRADED = "device_degraded"
 
+# Notification IDs (for persistent notifications)
+NOTIFICATION_ID_DEVICE_DEGRADED = "somfy_uai_plus_device_degraded"
+
 # State tracking thresholds
 POSITION_TOLERANCE = 2  # Consider position reached if within this percentage
 CONSECUTIVE_STABLE_COUNT = 2  # Number of same positions to consider movement stopped

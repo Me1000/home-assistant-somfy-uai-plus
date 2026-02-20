@@ -5,6 +5,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import Any
 
+from homeassistant.components.persistent_notification import async_create, async_dismiss
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -14,6 +15,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ISSUE_ID_DEVICE_DEGRADED,
+    NOTIFICATION_ID_DEVICE_DEGRADED,
 )
 from .somfy_api import ShadeInfo, SomfyUAIPlusAPI
 
@@ -147,6 +149,13 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
             translation_key=ISSUE_ID_DEVICE_DEGRADED,
             translation_placeholders={"host": self.api.host},
         )
+        async_create(
+            self.hass,
+            f"Somfy UAI+ at **{self.api.host}** is not responding. "
+            "The device may need to be restarted.",
+            title="Somfy UAI+ Not Responding",
+            notification_id=NOTIFICATION_ID_DEVICE_DEGRADED,
+        )
 
     def _clear_device_degraded(self) -> None:
         """Delete the repair issue if the device has recovered."""
@@ -155,6 +164,7 @@ class SomfyUAIPlusCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._device_degraded = False
         _LOGGER.info("Somfy UAI+ at %s has recovered", self.api.host)
         ir.async_delete_issue(self.hass, DOMAIN, ISSUE_ID_DEVICE_DEGRADED)
+        async_dismiss(self.hass, NOTIFICATION_ID_DEVICE_DEGRADED)
 
     async def _update_shade(self, node_id: str) -> None:
         """Update state for a single shade."""
